@@ -182,9 +182,16 @@ export const getCreateEnvFileCommand = (compose: ComposeNested) => {
 	).join("\n");
 
 	const encodedContent = encodeBase64(envFileContent);
+	// The caller is inside an OR-list: failures must be guarded explicitly.
+	// A private sibling also replaces preexisting files/symlinks atomically.
 	return `
-touch ${quote([envFilePath])};
-echo "${encodedContent}" | base64 -d > ${quote([envFilePath])};
+dokploy_env_tmp=$(mktemp ${quote([`${envFilePath}.XXXXXX`])}) || exit 1;
+if ! printf '%s' "${encodedContent}" | base64 -d > "$dokploy_env_tmp" ||
+   ! chmod 600 "$dokploy_env_tmp" ||
+   ! mv -fT -- "$dokploy_env_tmp" ${quote([envFilePath])}; then
+    rm -f -- "$dokploy_env_tmp";
+    exit 1;
+fi;
 	`;
 };
 
